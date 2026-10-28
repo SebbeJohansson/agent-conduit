@@ -29,6 +29,8 @@ export interface TranscriptState {
   ending?: 'error' | 'interrupted'
   /** Claude's last words when the turn ended, cut to LAST_TEXT_MAX: a question in them is a question for you. */
   lastText?: string
+  /** Epoch milliseconds the entry this was read from was written, when it says. */
+  at?: number
 }
 
 /**
@@ -58,6 +60,7 @@ interface TranscriptEntry {
   isSidechain?: boolean
   /** Set on the reply Claude Code writes when the API call failed ("API Error: …"). */
   isApiErrorMessage?: boolean
+  timestamp?: string
   message?: {
     role?: string
     stop_reason?: string | null
@@ -114,6 +117,16 @@ function toolNameOf(content: unknown): string | undefined {
  * session that has started but not yet exchanged a message.
  */
 export function readTranscriptState(tail: string): TranscriptState | null {
+  const found = lastConversational(tail)
+  if (!found) {
+    return null
+  }
+  const at = found.entry.timestamp ? Date.parse(found.entry.timestamp) : Number.NaN
+  return Number.isNaN(at) ? found.state : { ...found.state, at }
+}
+
+/** The last conversational entry of a tail, and the state it says the session is in. */
+function lastConversational(tail: string): { entry: TranscriptEntry, state: TranscriptState } | null {
   const lines = tail.split('\n')
 
   for (let index = lines.length - 1; index >= 0; index--) {
@@ -139,22 +152,25 @@ export function readTranscriptState(tail: string): TranscriptState | null {
     // A subagent's turn. Its parent is blocked on the tool call that spawned
     // it, so the session is busy no matter how the subagent's own turn ended.
     if (entry.isSidechain) {
-      return { phase: 'busy' }
+      return { entry, state: { phase: 'busy' } }
     }
 
     if (entry.type === 'assistant') {
       const stop = entry.message?.stop_reason
       if (stop === 'tool_use') {
-        return { phase: 'busy', tool: toolNameOf(entry.message?.content) }
+        return { entry, state: { phase: 'busy', tool: toolNameOf(entry.message?.content) } }
       }
       if (!stop || !TURN_ENDING.has(stop)) {
-        return { phase: 'busy' }
+        return { entry, state: { phase: 'busy' } }
       }
       const said = lastWords(textOf(entry.message?.content))
       return {
-        phase: 'turn-ended',
-        ...(entry.isApiErrorMessage ? { ending: 'error' as const } : {}),
-        ...(said ? { lastText: said } : {}),
+        entry,
+        state: {
+          phase: 'turn-ended',
+          ...(entry.isApiErrorMessage ? { ending: 'error' as const } : {}),
+          ...(said ? { lastText: said } : {}),
+        },
       }
     }
 
@@ -162,12 +178,12 @@ export function readTranscriptState(tail: string): TranscriptState | null {
     // own reads as "handed something, not replied yet": an interrupted
     // session looked busy forever.
     if (INTERRUPTED.test(textOf(entry.message?.content))) {
-      return { phase: 'turn-ended', ending: 'interrupted' }
+      return { entry, state: { phase: 'turn-ended', ending: 'interrupted' } }
     }
 
     // A user turn with no answer after it: the agent has been handed something
     // and has not replied yet.
-    return { phase: 'busy' }
+    return { entry, state: { phase: 'busy' } }
   }
 
   return null

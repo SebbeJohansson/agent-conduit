@@ -90,3 +90,45 @@ describe('readLiveClaudeSessions', () => {
     expect(sessions[0]?.name).toBe('mine')
   })
 })
+
+describe('permission prompts', () => {
+  const transcript = '/home/me/.claude/projects/-home-me-proj/s1.jsonl'
+  const marker = '/home/me/.claude/agent-conduit/permissions/s1.json'
+  const toolCall = (timestamp: string) => JSON.stringify({ type: 'assistant', timestamp, message: { stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'Bash' }] } })
+  const toolResult = (timestamp: string) => JSON.stringify({ type: 'user', timestamp, message: { content: [{ type: 'tool_result' }] } })
+
+  function files(extra: Record<string, string>) {
+    return memoryFs({
+      '/home/me/.claude/sessions/1.json': registry(1),
+      '/run/user/1000/cc-socks/1.sock': '',
+      ...extra,
+    })
+  }
+
+  it('reports a prompt opened after the tool call', async () => {
+    const fs = files({
+      [transcript]: `${toolCall('2026-10-28T10:00:00.000Z')}\n`,
+      [marker]: JSON.stringify({ at: Date.parse('2026-10-28T10:00:01.000Z'), tool: 'Bash', toolUseId: 't' }),
+    })
+    const { sessions } = await readLiveClaudeSessions(fs, ROOT, createLiveClaudeCache(), NOW)
+    expect(sessions[0]?.permission).toEqual({ since: Date.parse('2026-10-28T10:00:01.000Z'), tool: 'Bash' })
+  })
+
+  it('ignores a marker the transcript has moved past', async () => {
+    const fs = files({
+      [transcript]: `${toolCall('2026-10-28T10:00:00.000Z')}\n${toolResult('2026-10-28T10:00:05.000Z')}\n`,
+      [marker]: JSON.stringify({ at: Date.parse('2026-10-28T10:00:01.000Z') }),
+    })
+    const { sessions } = await readLiveClaudeSessions(fs, ROOT, createLiveClaudeCache(), NOW)
+    expect(sessions[0]?.permission).toBeUndefined()
+  })
+
+  it('ignores a marker once the turn has ended', async () => {
+    const fs = files({
+      [transcript]: `${DONE}\n`,
+      [marker]: JSON.stringify({ at: NOW }),
+    })
+    const { sessions } = await readLiveClaudeSessions(fs, ROOT, createLiveClaudeCache(), NOW)
+    expect(sessions[0]?.permission).toBeUndefined()
+  })
+})

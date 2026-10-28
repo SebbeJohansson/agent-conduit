@@ -11,8 +11,13 @@
     "access": "public"
   },
   "type": "module",
+  "bin": {
+    "agent-conduit": "bin/agent-conduit.mjs"
+  },
   "files": [
-    "dist"
+    "dist",
+    "bin",
+    "hooks"
   ],
   "exports": {
     ".": {

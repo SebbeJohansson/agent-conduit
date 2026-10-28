@@ -46,6 +46,26 @@ unchanged files are not read again.
 `listClaudeProjects` walks `projects/` instead and reads every transcript in
 full, for a session browser.
 
+### Permission prompts
+
+A transcript cannot tell a tool that is running from one waiting for you to
+allow it: both end on the same `tool_use` entry. A small Claude Code hook fills
+that gap:
+
+```bash
+npx agent-conduit install-claude-hook     # and uninstall-claude-hook to undo
+```
+
+It copies `hooks/claude-permission.sh` to `~/.claude/agent-conduit/` and
+registers it in `~/.claude/settings.json`, leaving every other setting and hook
+alone. On `PermissionRequest` it writes
+`~/.claude/agent-conduit/permissions/<session id>.json`, and it removes that
+file once the session moves on (the same tool call finishing, a new prompt,
+the turn ending). `readLiveClaudeSessions` then sets `permission` on the
+session, and only while nothing has been written to the transcript since the
+prompt opened, so a marker a hook failed to remove cannot linger. It is plain
+`sh`, because it runs on every tool call.
+
 ## OpenCode
 
 Talks to a running `opencode serve` (port 4096 by default). `watchOpencode`

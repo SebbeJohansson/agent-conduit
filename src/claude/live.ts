@@ -100,6 +100,20 @@ export interface LiveClaudeSession {
   lastActivity: number
   /** What the transcript ends in, or null before anything has been said. */
   state: TranscriptState | null
+  /**
+   * Set while the session is waiting for you to allow or deny a tool. Only
+   * known when agent-conduit's Claude Code hook is installed
+   * (`npx agent-conduit install-claude-hook`); see `hooks/claude-permission.sh`.
+   */
+  permission?: PendingPermission
+}
+
+/** A permission prompt a Claude Code session is showing. */
+export interface PendingPermission {
+  /** The tool asking, when the hook was told. */
+  tool?: string
+  /** Epoch milliseconds the prompt opened. */
+  since: number
 }
 
 /**
@@ -283,6 +297,44 @@ function sessionName(entry: RegistryEntry, titles: TranscriptTitles | undefined)
   return titles?.custom || titles?.ai || entry.name || directoryName(entry.cwd)
 }
 
+/**
+ * The permission prompt a session is showing, from the hook's marker.
+ *
+ * The hook removes the marker once the session moves on, but a hook can miss
+ * (a session killed mid-prompt, a hook that timed out), so the marker is also
+ * checked against the transcript: it only counts while the session is busy and
+ * nothing has been written since the prompt opened. Answering always writes
+ * something — the tool's result, or the refusal.
+ */
+async function pendingPermission(
+  fs: FileReader,
+  root: ClaudeRoot,
+  sessionId: string,
+  state: TranscriptState | null,
+): Promise<PendingPermission | undefined> {
+  if (state?.phase !== 'busy') {
+    return undefined
+  }
+  const raw = await fs.readText(joinPath(root.claudeDir, 'agent-conduit', 'permissions', `${sessionId}.json`))
+  if (!raw) {
+    return undefined
+  }
+  let marker: { at?: unknown, tool?: unknown }
+  try {
+    marker = JSON.parse(raw)
+  }
+  catch {
+    return undefined
+  }
+  if (typeof marker.at !== 'number' || marker.at < (state.at ?? 0)) {
+    return undefined
+  }
+  return {
+    since: marker.at,
+    ...(typeof marker.tool === 'string' && marker.tool ? { tool: marker.tool } : {}),
+  }
+}
+
 /** Last path segment, for a session with no name of its own. */
 export function directoryName(directory: string): string {
   return directory.split(/[/\\]/).filter(Boolean).at(-1) ?? directory
@@ -329,6 +381,8 @@ export async function readLiveClaudeSessions(
       continue
     }
 
+    const permission = await pendingPermission(fs, root, entry.sessionId, state)
+
     sessions.push({
       sessionId: entry.sessionId,
       pid,
@@ -340,6 +394,7 @@ export async function readLiveClaudeSessions(
       ...(entry.entrypoint ? { entrypoint: entry.entrypoint } : {}),
       ...(entry.bridgeSessionId ? { bridgeSessionId: entry.bridgeSessionId } : {}),
       ...(transcript ? { transcriptPath: transcript.path } : {}),
+      ...(permission ? { permission } : {}),
     })
   }
 
