@@ -59,11 +59,18 @@ afterEach(async () => {
 })
 
 describe('herdr agents', () => {
-  it('lists agents, with the session id that matches Claude Code\'s', async () => {
-    await serve(() => ({ result: { type: 'agent_list', agents: [CLAUDE_PANE, { pane_id: 'w2:p1', workspace_id: 'w2', tab_id: 'w2:t1', agent: 'opencode', agent_status: 'working', agent_session: null }] } }))
+  it('lists agents, with the session id and process ids that match Claude Code\'s', async () => {
+    await serve((method, params) => {
+      if (method === 'pane.process_info') {
+        return params.pane_id === 'w1:p2'
+          ? { result: { type: 'pane_process_info', pane_id: 'w1:p2', foreground_processes: [{ pid: 4242, name: 'claude' }] } }
+          : { error: { code: 'not_found', message: 'pane closed' } }
+      }
+      return { result: { type: 'agent_list', agents: [CLAUDE_PANE, { pane_id: 'w2:p1', workspace_id: 'w2', tab_id: 'w2:t1', agent: 'opencode', agent_status: 'working', agent_session: null }] } }
+    })
 
     expect(await listHerdrAgents({ socketPath })).toEqual([
-      { paneId: 'w1:p2', workspaceId: 'w1', tabId: 'w1:t1', name: 'reviewer', kind: 'claude', status: 'blocked', cwd: '/home/me/proj', title: 'Fix the login', sessionId: 'c4cc048e', focused: false },
+      { paneId: 'w1:p2', workspaceId: 'w1', tabId: 'w1:t1', name: 'reviewer', kind: 'claude', status: 'blocked', cwd: '/home/me/proj', title: 'Fix the login', sessionId: 'c4cc048e', focused: false, pids: [4242] },
       { paneId: 'w2:p1', workspaceId: 'w2', tabId: 'w2:t1', kind: 'opencode', status: 'working', focused: false },
     ])
   })

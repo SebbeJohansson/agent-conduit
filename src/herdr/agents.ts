@@ -45,10 +45,27 @@ function toAgent(info: AgentInfo): HerdrAgent {
   }
 }
 
-/** Every pane herdr recognises a coding agent in. */
+/** The pane's foreground process ids, or undefined when herdr cannot say. */
+async function foregroundPids(paneId: string, options?: HerdrOptions): Promise<number[] | undefined> {
+  try {
+    const info = await herdrRequest<{ foreground_processes?: Array<{ pid?: unknown }> }>('pane.process_info', { pane_id: paneId }, options)
+    const pids = (info.foreground_processes ?? []).map(process => process.pid).filter((pid): pid is number => typeof pid === 'number')
+    return pids.length ? pids : undefined
+  }
+  catch {
+    // Older servers, or a pane that closed between the two calls.
+    return undefined
+  }
+}
+
+/** Every pane herdr recognises a coding agent in, with its foreground processes. */
 export async function listHerdrAgents(options?: HerdrOptions): Promise<HerdrAgent[]> {
   const result = await herdrRequest<{ agents?: AgentInfo[] }>('agent.list', {}, options)
-  return (result.agents ?? []).map(toAgent)
+  return Promise.all((result.agents ?? []).map(async (info) => {
+    const agent = toAgent(info)
+    const pids = await foregroundPids(agent.paneId, options)
+    return pids ? { ...agent, pids } : agent
+  }))
 }
 
 export interface HerdrWatchHandlers {

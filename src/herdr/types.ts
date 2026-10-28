@@ -35,4 +35,11 @@ export interface HerdrAgent {
   sessionId?: string
   /** Whether a client has the pane focused right now. */
   focused: boolean
+  /**
+   * The processes in the pane's foreground, e.g. the `claude` process itself.
+   * Claude Code's registry is keyed by the same process ids, which matches a
+   * pane to its session without herdr's Claude Code integration. Absent when
+   * herdr could not say.
+   */
+  pids?: number[]
 }
