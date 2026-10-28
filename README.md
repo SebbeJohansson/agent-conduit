@@ -66,6 +66,12 @@ session, and only while nothing has been written to the transcript since the
 prompt opened, so a marker a hook failed to remove cannot linger. It is plain
 `sh`, because it runs on every tool call.
 
+## Resuming
+
+`resumeCommand('claude' | 'opencode', { sessionId, directory })` gives the
+shell command that picks a session up again in a terminal, for example
+`cd /home/me/proj && claude --resume <id>`.
+
 ## OpenCode
 
 Talks to a running `opencode serve` (port 4096 by default). `watchOpencode`

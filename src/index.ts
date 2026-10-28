@@ -1,6 +1,7 @@
 // Everything that runs in any host. `agent-conduit/node` adds a Node file reader.
 
 export * from './fs.js'
+export * from './resume.js'
 
 export * from './claude/paths.js'
 export * from './claude/status.js'
