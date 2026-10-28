@@ -1,7 +1,8 @@
 // A `FileReader` over `node:fs`, for apps that run on a Node server.
 //
-// Also the Claude Code hook installer (claudeHook.ts). Kept out of the main
-// entry so a browser bundle never sees a `node:` import.
+// Also the Claude Code hook installer (claudeHook.ts) and the herdr client
+// (herdr/), which talks over a unix socket. Kept out of the main entry so a
+// browser bundle never sees a `node:` import.
 
 import { open, readdir, readFile, stat } from 'node:fs/promises'
 import type { FileReader } from './fs.js'
@@ -39,3 +40,5 @@ export const nodeFileReader: FileReader = {
 }
 
 export * from './claudeHook.js'
+export * from './herdr/client.js'
+export * from './herdr/agents.js'

@@ -11,3 +11,5 @@ export * from './claude/history.js'
 export * from './opencode/events.js'
 export * from './opencode/status.js'
 export * from './opencode/client.js'
+
+export type * from './herdr/types.js'

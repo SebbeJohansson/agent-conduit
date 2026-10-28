@@ -91,10 +91,28 @@ it.
 | `working` | the session or one of its subagents is running |
 | `idle` | nothing is running |
 
+## herdr
+
+[herdr](https://herdr.dev) owns the terminals agents run in, so through it an
+app can do what reading files cannot: see a dialog on screen (`blocked`), and
+type into the session as you would. From `agent-conduit/node`, over herdr's
+unix socket (`~/.config/herdr/herdr.sock` by default):
+
+| Function | Does |
+| --- | --- |
+| `watchHerdr` / `listHerdrAgents` | every agent in a pane: kind, status, cwd, and the session id herdr's Claude Code integration reports |
+| `promptHerdrAgent` | types a prompt and presses Enter; refused (`agent_blocked`) while a dialog is open |
+| `sendHerdrKeys` | presses keys, e.g. `esc`, to answer a dialog |
+| `readHerdrAgent` | the pane's recent output |
+| `startHerdrAgent` | starts an agent in a new, unfocused herdr workspace |
+
+The types (`HerdrAgent`, `HerdrAgentStatus`) are in the main entry too, for
+browser code that shows what a server read.
+
 ## Using it from another project
 
 ```json
-"dependencies": { "agent-conduit": "^0.3.0" }
+"dependencies": { "agent-conduit": "^0.4.0" }
 ```
 
 ### Running against this checkout

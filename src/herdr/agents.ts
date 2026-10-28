@@ -1,0 +1,175 @@
+// The coding agents running in herdr's panes, and what an app can do with
+// them: list and watch them, send a prompt, press keys (answering a permission
+// dialog), read the screen, and start a new one.
+//
+// A target is an agent's name or the id of the pane hosting it (`w1:p2`).
+
+import type { HerdrOptions } from './client.js'
+import type { HerdrAgent, HerdrAgentStatus } from './types.js'
+import { herdrRequest } from './client.js'
+
+export type { HerdrAgent, HerdrAgentStatus } from './types.js'
+
+const STATUSES = new Set<HerdrAgentStatus>(['idle', 'working', 'blocked', 'done', 'unknown'])
+
+interface AgentInfo {
+  pane_id: string
+  workspace_id: string
+  tab_id: string
+  name?: string | null
+  agent?: string | null
+  agent_status?: string
+  cwd?: string | null
+  foreground_cwd?: string | null
+  terminal_title_stripped?: string | null
+  title?: string | null
+  focused?: boolean
+  agent_session?: { agent: string, kind: 'id' | 'path', source: string, value: string } | null
+}
+
+function toAgent(info: AgentInfo): HerdrAgent {
+  const status = STATUSES.has(info.agent_status as HerdrAgentStatus) ? info.agent_status as HerdrAgentStatus : 'unknown'
+  const cwd = info.foreground_cwd || info.cwd || undefined
+  const title = info.terminal_title_stripped || info.title || undefined
+  return {
+    paneId: info.pane_id,
+    workspaceId: info.workspace_id,
+    tabId: info.tab_id,
+    status,
+    focused: Boolean(info.focused),
+    ...(info.name ? { name: info.name } : {}),
+    ...(info.agent ? { kind: info.agent } : {}),
+    ...(cwd ? { cwd } : {}),
+    ...(title ? { title } : {}),
+    ...(info.agent_session?.kind === 'id' && info.agent_session.value ? { sessionId: info.agent_session.value } : {}),
+  }
+}
+
+/** Every pane herdr recognises a coding agent in. */
+export async function listHerdrAgents(options?: HerdrOptions): Promise<HerdrAgent[]> {
+  const result = await herdrRequest<{ agents?: AgentInfo[] }>('agent.list', {}, options)
+  return (result.agents ?? []).map(toAgent)
+}
+
+export interface HerdrWatchHandlers {
+  /** The agents, on the first read and whenever anything about them changes. */
+  onAgents: (agents: HerdrAgent[]) => void
+  /** herdr is not answering (not running, or not installed); reads keep being retried. */
+  onError?: (message: string) => void
+}
+
+export interface HerdrWatch {
+  stop: () => void
+}
+
+/**
+ * Keep a live list of herdr's agents.
+ *
+ * Polled rather than subscribed: herdr only streams status changes for panes
+ * named one by one, so a list of every agent would need a subscription per
+ * pane, renewed as panes come and go. A local `agent.list` every couple of
+ * seconds is simpler and just as current for a status display.
+ */
+export function watchHerdr(handlers: HerdrWatchHandlers, options: HerdrOptions & { intervalMs?: number } = {}): HerdrWatch {
+  let stopped = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let last: string | undefined
+
+  async function read() {
+    try {
+      const agents = await listHerdrAgents(options)
+      const snapshot = JSON.stringify(agents)
+      if (snapshot !== last) {
+        last = snapshot
+        handlers.onAgents(agents)
+      }
+    }
+    catch (error) {
+      // Forget the last list, so the agents are reported again once herdr is back.
+      last = undefined
+      handlers.onError?.(error instanceof Error ? error.message : String(error))
+    }
+    finally {
+      if (!stopped) {
+        timer = setTimeout(() => void read(), options.intervalMs ?? 2_000)
+      }
+    }
+  }
+
+  void read()
+  return {
+    stop() {
+      stopped = true
+      clearTimeout(timer)
+    },
+  }
+}
+
+/**
+ * Type a prompt into the agent's pane and press Enter, as you would.
+ *
+ * herdr refuses (HerdrError `agent_blocked`) while the agent shows an approval
+ * or question dialog, so a prompt can never land in one by accident.
+ */
+export async function promptHerdrAgent(target: string, text: string, options?: HerdrOptions): Promise<HerdrAgent> {
+  const result = await herdrRequest<{ agent: AgentInfo }>('agent.prompt', { target, text }, options)
+  return toAgent(result.agent)
+}
+
+/**
+ * Press keys in the agent's pane: `enter`, `esc`, `1`, `ctrl+c`, ... herdr
+ * checks every key before writing any of them.
+ */
+export async function sendHerdrKeys(target: string, keys: string[], options?: HerdrOptions): Promise<void> {
+  await herdrRequest('agent.send_keys', { target, keys }, options)
+}
+
+/** The agent's recent output as plain text, soft wraps joined. */
+export async function readHerdrAgent(target: string, lines = 120, options?: HerdrOptions): Promise<string> {
+  const result = await herdrRequest<{ read?: { text?: string } }>(
+    'agent.read',
+    { target, source: 'recent_unwrapped', lines, strip_ansi: true },
+    options,
+  )
+  return result.read?.text ?? ''
+}
+
+/** A herdr agent name: lowercase, starting with a letter, at most 32 characters. */
+export function herdrAgentName(directory: string, suffix = Math.random().toString(36).slice(2, 6)): string {
+  const base = (directory.split(/[/\\]/).filter(Boolean).at(-1) ?? 'agent')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^[^a-z]+/, '')
+    .slice(0, 26) || 'agent'
+  return `${base}-${suffix}`
+}
+
+export interface StartHerdrAgentOptions {
+  /** Which agent: `claude`, `opencode`, `codex`, ... (herdr's `agent start --kind`). */
+  kind: string
+  /** The directory to start it in. */
+  cwd: string
+  /** Its herdr name; derived from the directory when left out. Must be unique among live agents. */
+  name?: string
+  /** Arguments for the agent itself. */
+  args?: string[]
+}
+
+/**
+ * Start an agent in a new herdr workspace, without taking focus from whatever
+ * you are looking at. Returns once herdr sees the agent ready for input.
+ */
+export async function startHerdrAgent(start: StartHerdrAgentOptions, options?: HerdrOptions): Promise<HerdrAgent> {
+  const name = start.name ?? herdrAgentName(start.cwd)
+  const created = await herdrRequest<{ root_pane: { pane_id: string } }>(
+    'workspace.create',
+    { cwd: start.cwd, label: name, focus: false },
+    options,
+  )
+  const result = await herdrRequest<{ agent: AgentInfo }>(
+    'agent.start',
+    { name, kind: start.kind, pane_id: created.root_pane.pane_id, args: start.args ?? [], timeout_ms: 30_000 },
+    { ...options, timeoutMs: Math.max(options?.timeoutMs ?? 0, 35_000) },
+  )
+  return toAgent(result.agent)
+}
