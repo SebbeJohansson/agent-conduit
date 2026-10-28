@@ -94,7 +94,7 @@ it.
 ## Using it from another project
 
 ```json
-"dependencies": { "agent-conduit": "^0.2.0" }
+"dependencies": { "agent-conduit": "^0.3.0" }
 ```
 
 ### Running against this checkout
