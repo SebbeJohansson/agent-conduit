@@ -53,8 +53,13 @@ allow it: both end on the same `tool_use` entry. A small Claude Code hook fills
 that gap:
 
 ```bash
-npx agent-conduit install-claude-hook     # and uninstall-claude-hook to undo
+npx agent-conduit install-claude-hook     # uninstall-claude-hook to undo, claude-hook-status to check
 ```
+
+Apps can offer the same as a button: `installClaudeHook`, `uninstallClaudeHook`
+and `readClaudeHookStatus` are exported from `agent-conduit/node`. The status
+says whether the hook is installed and whether it is this version's script, so
+an app can offer an update after agent-conduit changes it.
 
 It copies `hooks/claude-permission.sh` to `~/.claude/agent-conduit/` and
 registers it in `~/.claude/settings.json`, leaving every other setting and hook
