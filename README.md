@@ -1,7 +1,7 @@
 # agent-wire
 
 Reads what Claude Code and OpenCode sessions are doing, for apps that show
-them. Shared by [my-widget](../my-widget) and [openui](../opencode-vis).
+them. Shared by [my-widget](https://github.com/SebbeJohansson/my-widget) and [openui](https://github.com/SebbeJohansson/opencode-vis).
 
 It answers two questions:
 
@@ -62,15 +62,34 @@ it.
 
 ## Using it from another project
 
-Until it is published, link the checkout:
+It is published to npm as `@sebbejohansson/agent-wire` (`agent-wire` was
+taken). Install it under the short name, so imports read `from 'agent-wire'`:
 
 ```json
-"dependencies": { "agent-wire": "portal:../agent-wire" }
+"dependencies": { "agent-wire": "npm:@sebbejohansson/agent-wire@^0.1.0" }
 ```
 
-The package ships compiled JavaScript from `dist/`, so run `yarn build` (or
-`yarn dev` to rebuild on save) after changing it. A git dependency builds
-itself through the `prepare` script.
+### Running against this checkout
+
+my-widget and openui read `AGENT_WIRE_DIR` from their `.env`, which git ignores.
+When it is set, their `nuxt.config.ts` points `agent-wire` at that checkout's
+`dist/` instead of the installed package, so local changes show up without a
+release, while CI and fresh clones keep using npm:
+
+```bash
+echo 'AGENT_WIRE_DIR=../agent-wire' >> ../my-widget/.env
+yarn dev   # here: rebuilds dist/ on save
+```
+
+### Releasing
+
+```bash
+npm version minor   # or patch
+npm publish         # builds through the prepare script
+git push --follow-tags
+```
+
+Then bump the version in each app's `package.json`.
 
 ## Development
 
