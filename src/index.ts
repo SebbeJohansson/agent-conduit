@@ -1,4 +1,4 @@
-// Everything that runs in any host. `agent-wire/node` adds a Node file reader.
+// Everything that runs in any host. `agent-tap/node` adds a Node file reader.
 
 export * from './fs.js'
 

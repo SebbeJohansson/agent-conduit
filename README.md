@@ -1,4 +1,4 @@
-# agent-wire
+# agent-tap
 
 Reads what Claude Code and OpenCode sessions are doing, for apps that show
 them. Shared by [my-widget](https://github.com/SebbeJohansson/my-widget) and [openui](https://github.com/SebbeJohansson/opencode-vis).
@@ -18,8 +18,8 @@ own way: a Tauri webview through its fs plugin, a dev server through an HTTP
 route, a Node server through `node:fs`. Node apps can use the one included:
 
 ```ts
-import { listClaudeProjects } from 'agent-wire'
-import { nodeFileReader } from 'agent-wire/node'
+import { listClaudeProjects } from 'agent-tap'
+import { nodeFileReader } from 'agent-tap/node'
 
 const projects = await listClaudeProjects(nodeFileReader, `${homedir()}/.claude`)
 ```
@@ -62,22 +62,19 @@ it.
 
 ## Using it from another project
 
-It is published to npm as `@sebbejohansson/agent-wire` (`agent-wire` was
-taken). Install it under the short name, so imports read `from 'agent-wire'`:
-
 ```json
-"dependencies": { "agent-wire": "npm:@sebbejohansson/agent-wire@^0.1.0" }
+"dependencies": { "agent-tap": "^0.1.0" }
 ```
 
 ### Running against this checkout
 
-my-widget and openui read `AGENT_WIRE_DIR` from their `.env`, which git ignores.
-When it is set, their `nuxt.config.ts` points `agent-wire` at that checkout's
+my-widget and openui read `AGENT_TAP_DIR` from their `.env`, which git ignores.
+When it is set, their `nuxt.config.ts` points `agent-tap` at that checkout's
 `dist/` instead of the installed package, so local changes show up without a
 release, while CI and fresh clones keep using npm:
 
 ```bash
-echo 'AGENT_WIRE_DIR=../agent-wire' >> ../my-widget/.env
+echo 'AGENT_TAP_DIR=../agent-tap' >> ../my-widget/.env
 yarn dev   # here: rebuilds dist/ on save
 ```
 

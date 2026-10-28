@@ -1,11 +1,11 @@
 {
-  "name": "@sebbejohansson/agent-wire",
+  "name": "agent-tap",
   "version": "0.1.0",
-  "description": "Reads what Claude Code and OpenCode sessions are doing, for apps that show them",
+  "description": "Reads what Claude Code and OpenCode sessions are doing, for apps that show them and later act on them",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SebbeJohansson/agent-wire.git"
+    "url": "git+https://github.com/SebbeJohansson/agent-tap.git"
   },
   "publishConfig": {
     "access": "public"

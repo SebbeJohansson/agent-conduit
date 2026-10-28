@@ -4,7 +4,7 @@
 // plugin, a dev server through an HTTP route, a Node server through `node:fs`,
 // and each of them limits what may be read in its own way. So the app hands in
 // these four operations and everything above them is one implementation that
-// runs unchanged in any of those hosts. `agent-wire/node` has a ready-made one
+// runs unchanged in any of those hosts. `agent-tap/node` has a ready-made one
 // for Node.
 
 export interface FileStamp {

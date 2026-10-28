@@ -157,17 +157,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sebbejohansson/agent-wire@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "@sebbejohansson/agent-wire@workspace:."
-  dependencies:
-    "@types/node": "npm:^26.4.1"
-    typescript: "npm:~5.9"
-    vite: "npm:^8.2.2"
-    vitest: "npm:^5.0.0"
-  languageName: unknown
-  linkType: soft
-
 "@types/chai@npm:^5.2.2":
   version: 5.2.3
   resolution: "@types/chai@npm:5.2.3"
@@ -234,6 +223,17 @@ __metadata:
   checksum: 10c0/8e88f5c798ea4562d28c5a3e9ad69e3879890bc5d695d8f2dffb8609be4c890aacc8f80ef4553fdd2c6a62d70c2ce8bc57b38074e383beb7487bdafa9ed42ea5
   languageName: node
   linkType: hard
+
+"agent-tap@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "agent-tap@workspace:."
+  dependencies:
+    "@types/node": "npm:^26.4.1"
+    typescript: "npm:~5.9"
+    vite: "npm:^8.2.2"
+    vitest: "npm:^5.0.0"
+  languageName: unknown
+  linkType: soft
 
 "assertion-error@npm:^2.0.1":
   version: 2.0.1
