@@ -112,7 +112,7 @@ browser code that shows what a server read.
 ## Using it from another project
 
 ```json
-"dependencies": { "agent-conduit": "^0.4.0" }
+"dependencies": { "agent-conduit": "^0.5.0" }
 ```
 
 ### Running against this checkout
