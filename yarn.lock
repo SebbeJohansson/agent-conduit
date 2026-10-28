@@ -224,9 +224,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"agent-tap@workspace:.":
+"agent-conduit@workspace:.":
   version: 0.0.0-use.local
-  resolution: "agent-tap@workspace:."
+  resolution: "agent-conduit@workspace:."
   dependencies:
     "@types/node": "npm:^26.4.1"
     typescript: "npm:~5.9"
