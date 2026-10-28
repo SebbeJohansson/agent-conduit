@@ -76,7 +76,7 @@ async function install() {
 
   console.log(`installed ${hookPath}`)
   console.log(`registered it in ${settingsPath} for ${EVENTS.map(([event]) => event).join(', ')}`)
-  console.log('sessions started from now on report permission prompts; running ones pick it up on their next settings reload')
+  console.log('sessions started from now on report permission prompts; restart a running one to include it')
 }
 
 async function uninstall() {
