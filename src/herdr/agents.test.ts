@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HerdrError } from './client.js'
-import { herdrAgentName, listHerdrAgents, promptHerdrAgent, readHerdrAgent, sendHerdrKeys, startHerdrAgent, watchHerdr } from './agents.js'
+import { dialogOf, herdrAgentName, listHerdrAgents, promptHerdrAgent, readHerdrAgent, sendHerdrKeys, startHerdrAgent, watchHerdr } from './agents.js'
 
 type Handler = (method: string, params: Record<string, unknown>) => { result?: unknown, error?: { code: string, message: string } }
 
@@ -66,11 +66,14 @@ describe('herdr agents', () => {
           ? { result: { type: 'pane_process_info', process_info: { pane_id: 'w1:p2', foreground_processes: [{ pid: 4242, name: 'claude' }] } } }
           : { error: { code: 'not_found', message: 'pane closed' } }
       }
+      if (method === 'agent.read') {
+        return { result: { type: 'pane_read', read: { text: 'Do you want to proceed?\n❯ 1. Yes\n  2. Yes, and don\'t ask again\n  3. No' } } }
+      }
       return { result: { type: 'agent_list', agents: [CLAUDE_PANE, { pane_id: 'w2:p1', workspace_id: 'w2', tab_id: 'w2:t1', agent: 'opencode', agent_status: 'working', agent_session: null }] } }
     })
 
     expect(await listHerdrAgents({ socketPath })).toEqual([
-      { paneId: 'w1:p2', workspaceId: 'w1', tabId: 'w1:t1', name: 'reviewer', kind: 'claude', status: 'blocked', cwd: '/home/me/proj', title: 'Fix the login', sessionId: 'c4cc048e', focused: false, pids: [4242] },
+      { paneId: 'w1:p2', workspaceId: 'w1', tabId: 'w1:t1', name: 'reviewer', kind: 'claude', status: 'blocked', cwd: '/home/me/proj', title: 'Fix the login', sessionId: 'c4cc048e', focused: false, pids: [4242], dialog: 'permission' },
       { paneId: 'w2:p1', workspaceId: 'w2', tabId: 'w2:t1', kind: 'opencode', status: 'working', focused: false },
     ])
   })
@@ -168,3 +171,19 @@ describe('herdrAgentName', () => {
     expect(herdrAgentName('/', 'ab12')).toBe('agent-ab12')
   })
 })
+
+describe('dialogOf', () => {
+  it('recognises a Claude Code permission prompt', () => {
+    expect(dialogOf('claude', ' Bash command\n  npm test\n Do you want to proceed?\n ❯ 1. Yes\n   2. Yes, and don\'t ask again for npm test\n   3. No, and tell Claude what to do differently (esc)')).toBe('permission')
+  })
+
+  // Seen in the wild: answering this with Enter quits the session.
+  it('does not take the folder-trust screen for one', () => {
+    expect(dialogOf('claude', ' Quick safety check: Is this a project you created or one you trust?\n ❯ No, exit\n   Yes, I trust this folder\n Enter to confirm · Esc to cancel')).toBe('other')
+  })
+
+  it('knows no other agent\'s dialogs', () => {
+    expect(dialogOf('opencode', 'Do you want to proceed?\n 1. Yes\n 3. No')).toBe('other')
+  })
+})
+

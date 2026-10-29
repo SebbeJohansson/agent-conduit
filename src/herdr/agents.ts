@@ -5,10 +5,10 @@
 // A target is an agent's name or the id of the pane hosting it (`w1:p2`).
 
 import type { HerdrOptions } from './client.js'
-import type { HerdrAgent, HerdrAgentStatus } from './types.js'
+import type { HerdrAgent, HerdrAgentStatus, HerdrDialog } from './types.js'
 import { HerdrError, herdrRequest } from './client.js'
 
-export type { HerdrAgent, HerdrAgentStatus } from './types.js'
+export type { HerdrAgent, HerdrAgentStatus, HerdrDialog } from './types.js'
 
 const STATUSES = new Set<HerdrAgentStatus>(['idle', 'working', 'blocked', 'done', 'unknown'])
 
@@ -58,13 +58,50 @@ async function foregroundPids(paneId: string, options?: HerdrOptions): Promise<n
   }
 }
 
-/** Every pane herdr recognises a coding agent in, with its foreground processes. */
+/**
+ * Which dialog a blocked agent is showing, from the bottom of its screen.
+ *
+ * `blocked` covers every dialog, and they do not all mean the same keys: a
+ * Claude Code permission prompt is "1. Yes / 2. Yes, and don't ask again /
+ * 3. No", but its folder-trust screen highlights "No, exit", so a key that
+ * allows a tool on one quits the session on the other. Only the permission
+ * prompt is recognised, by its own wording; everything else is `other`, for
+ * a person to answer in herdr.
+ */
+export function dialogOf(kind: string | undefined, screen: string): HerdrDialog {
+  if (kind === 'claude'
+    && /Do you want to (proceed|make this edit|create|allow|delete|run|fetch)/i.test(screen)
+    && /\b1\.\s+Yes\b/.test(screen)
+    && /\bNo\b/.test(screen)
+    && !/trust this folder/i.test(screen)) {
+    return 'permission'
+  }
+  return 'other'
+}
+
+async function readDialog(agent: HerdrAgent, options?: HerdrOptions): Promise<HerdrDialog> {
+  try {
+    const result = await herdrRequest<{ read?: { text?: string } }>(
+      'agent.read',
+      { target: agent.paneId, source: 'detection', strip_ansi: true },
+      options,
+    )
+    return dialogOf(agent.kind, result.read?.text ?? '')
+  }
+  catch {
+    return 'other'
+  }
+}
+
+/** Every pane herdr recognises a coding agent in, with its foreground processes and, when blocked, its dialog. */
 export async function listHerdrAgents(options?: HerdrOptions): Promise<HerdrAgent[]> {
   const result = await herdrRequest<{ agents?: AgentInfo[] }>('agent.list', {}, options)
   return Promise.all((result.agents ?? []).map(async (info) => {
-    const agent = toAgent(info)
+    let agent = toAgent(info)
     const pids = await foregroundPids(agent.paneId, options)
-    return pids ? { ...agent, pids } : agent
+    if (pids) agent = { ...agent, pids }
+    if (agent.status === 'blocked') agent = { ...agent, dialog: await readDialog(agent, options) }
+    return agent
   }))
 }
 

@@ -42,4 +42,14 @@ export interface HerdrAgent {
    * herdr could not say.
    */
   pids?: number[]
+  /**
+   * When `blocked`: whether the dialog is a recognised permission prompt
+   * (allow or deny a tool), or anything else (folder trust, a question), which
+   * only a person should answer. See `dialogOf`.
+   */
+  dialog?: HerdrDialog
 }
+
+/** A blocked agent's dialog: a tool permission prompt, or something else. */
+export type HerdrDialog = 'permission' | 'other'
+
