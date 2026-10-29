@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HerdrError } from './client.js'
-import { dialogOf, herdrAgentName, listHerdrAgents, promptHerdrAgent, readHerdrAgent, sendHerdrKeys, startHerdrAgent, watchHerdr } from './agents.js'
+import { answerHerdrDialog, dialogOf, dialogScreenOf, herdrAgentName, listHerdrAgents, promptHerdrAgent, readHerdrAgent, sendHerdrKeys, startHerdrAgent, watchHerdr } from './agents.js'
 
 type Handler = (method: string, params: Record<string, unknown>) => { result?: unknown, error?: { code: string, message: string } }
 
@@ -73,7 +73,10 @@ describe('herdr agents', () => {
     })
 
     expect(await listHerdrAgents({ socketPath })).toEqual([
-      { paneId: 'w1:p2', workspaceId: 'w1', tabId: 'w1:t1', name: 'reviewer', kind: 'claude', status: 'blocked', cwd: '/home/me/proj', title: 'Fix the login', sessionId: 'c4cc048e', focused: false, pids: [4242], dialog: 'permission' },
+      {
+        paneId: 'w1:p2', workspaceId: 'w1', tabId: 'w1:t1', name: 'reviewer', kind: 'claude', status: 'blocked', cwd: '/home/me/proj', title: 'Fix the login', sessionId: 'c4cc048e', focused: false, pids: [4242], dialog: 'permission',
+        dialogScreen: { question: 'Do you want to proceed?', choices: [{ key: '1', label: 'Yes', selected: true }, { key: '2', label: 'Yes, and don\'t ask again' }, { key: '3', label: 'No' }] },
+      },
       { paneId: 'w2:p1', workspaceId: 'w2', tabId: 'w2:t1', kind: 'opencode', status: 'working', focused: false },
     ])
   })
@@ -187,3 +190,66 @@ describe('dialogOf', () => {
   })
 })
 
+// The screen of a session that sat "stuck" for minutes: a dialog with no
+// "Do you want to", whose first choice changes a setting for good.
+const READ_OUTSIDE = [
+  '──────────────────────────────────────────────────────────────────────',
+  ' Read outside the working directories',
+  '╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌',
+  ' Read(/home/me/proj/app/pages/dashboa',
+  ' rd/system.vue · lines 1-250)',
+  '╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌',
+  ' Auto mode and the sandbox read outside the working directories',
+  ' without asking. Block: the file tools refuse reads outside the                No changes this session',
+  '',
+  ' Allow this read outside the working directories?',
+  ' ❯ 1. Yes, and keep allowing any reads outside the working directories',
+  '   2. No, and block reads outside the working directories from now on',
+  '   3. No, and ask again next time',
+  '   4. Yes, but ask again next time',
+  '                                                                       +1 file edited before this session (show)',
+  ' Esc to cancel · Tab to amend',
+].join('\n')
+
+describe('dialogScreenOf', () => {
+  it('reads the question, what it is about and every choice', () => {
+    expect(dialogScreenOf(READ_OUTSIDE)).toEqual({
+      question: 'Allow this read outside the working directories?',
+      detail: ' Read outside the working directories\n Read(/home/me/proj/app/pages/dashboa\n rd/system.vue · lines 1-250)\n Auto mode and the sandbox read outside the working directories\n without asking. Block: the file tools refuse reads outside the',
+      choices: [
+        { key: '1', label: 'Yes, and keep allowing any reads outside the working directories', selected: true },
+        { key: '2', label: 'No, and block reads outside the working directories from now on' },
+        { key: '3', label: 'No, and ask again next time' },
+        { key: '4', label: 'Yes, but ask again next time' },
+      ],
+    })
+  })
+
+  it('joins a label that wraps, and ignores numbered lines above the dialog', () => {
+    const screen = ' Plan:\n 1. Add the route\n 2. Test it\n──────────\n Bash command\n   npm test\n Do you want to proceed?\n ❯ 1. Yes\n   2. Yes, and don\'t ask again for npm test commands in\n      /home/me/proj\n   3. No\n'
+    expect(dialogScreenOf(screen)?.choices.map(choice => choice.label)).toEqual(['Yes', 'Yes, and don\'t ask again for npm test commands in /home/me/proj', 'No'])
+    expect(dialogScreenOf(screen)?.detail).toBe(' Bash command\n   npm test')
+  })
+
+  it('makes out nothing without numbered choices', () => {
+    expect(dialogScreenOf(' Is this a project you trust?\n ❯ No, exit\n   Yes, I trust this folder\n Enter to confirm')).toBeUndefined()
+    expect(dialogScreenOf('> working on it\n 1. one thing')).toBeUndefined()
+  })
+})
+
+describe('answerHerdrDialog', () => {
+  const answer = { question: 'Allow this read outside the working directories?', key: '3', label: 'No, and ask again next time' }
+
+  it('presses the choice\'s key while the same dialog is on screen', async () => {
+    await serve(method => method === 'agent.read' ? { result: { read: { text: READ_OUTSIDE } } } : { result: { type: 'ok' } })
+    await answerHerdrDialog('w1:p2', answer, { socketPath })
+    expect(calls.at(-1)).toEqual({ method: 'agent.send_keys', params: { target: 'w1:p2', keys: ['3'] } })
+  })
+
+  it('presses nothing once the screen shows another dialog', async () => {
+    await serve(() => ({ result: { read: { text: ' Do you want to proceed?\n ❯ 1. Yes\n   2. No\n   3. No, and tell Claude' } } }))
+    const failure = await answerHerdrDialog('w1:p2', answer, { socketPath }).catch(error => error)
+    expect(failure.code).toBe('dialog_changed')
+    expect(calls.map(call => call.method)).toEqual(['agent.read'])
+  })
+})

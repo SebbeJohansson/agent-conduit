@@ -48,8 +48,30 @@ export interface HerdrAgent {
    * only a person should answer. See `dialogOf`.
    */
   dialog?: HerdrDialog
+  /**
+   * When `blocked`: the dialog as it reads on screen, when its choices could
+   * be made out. Each choice is answered by pressing its key, so a person can
+   * pick any of them, not only allow or deny. See `dialogScreenOf`.
+   */
+  dialogScreen?: HerdrDialogScreen
 }
 
 /** A blocked agent's dialog: a tool permission prompt, or something else. */
 export type HerdrDialog = 'permission' | 'other'
 
+/** A dialog's question and its numbered choices, read off the screen. */
+export interface HerdrDialogScreen {
+  /** The line that asks, e.g. `Do you want to proceed?`. */
+  question: string
+  /** What the dialog shows above the question: the command, the file, why it asks. */
+  detail?: string
+  choices: HerdrDialogChoice[]
+}
+
+export interface HerdrDialogChoice {
+  /** The key that picks it: its number. */
+  key: string
+  label: string
+  /** The highlighted one, which Enter would pick. */
+  selected?: boolean
+}

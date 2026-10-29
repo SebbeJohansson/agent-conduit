@@ -100,13 +100,14 @@ unix socket (`~/.config/herdr/herdr.sock` by default):
 
 | Function | Does |
 | --- | --- |
-| `watchHerdr` / `listHerdrAgents` | every agent in a pane: kind, status, cwd, and the session id herdr's Claude Code integration reports |
+| `watchHerdr` / `listHerdrAgents` | every agent in a pane: kind, status, cwd, and the session id herdr's Claude Code integration reports; when blocked, whether the dialog is a permission prompt (`dialog`) and, for Claude Code, its question and numbered choices (`dialogScreen`) |
 | `promptHerdrAgent` | types a prompt and presses Enter; refused (`agent_blocked`) while a dialog is open |
 | `sendHerdrKeys` | presses keys, e.g. `esc`, to answer a dialog |
+| `answerHerdrDialog` | picks one of a dialog's choices by its number, only while that same dialog is still on screen (else `dialog_changed`, nothing pressed) |
 | `readHerdrAgent` | the pane's recent output |
 | `startHerdrAgent` | starts an agent in a new, unfocused herdr workspace |
 
-The types (`HerdrAgent`, `HerdrAgentStatus`) are in the main entry too, for
+The types (`HerdrAgent`, `HerdrAgentStatus`, `HerdrDialogScreen`) are in the main entry too, for
 browser code that shows what a server read.
 
 ## Using it from another project

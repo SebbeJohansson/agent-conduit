@@ -5,10 +5,10 @@
 // A target is an agent's name or the id of the pane hosting it (`w1:p2`).
 
 import type { HerdrOptions } from './client.js'
-import type { HerdrAgent, HerdrAgentStatus, HerdrDialog } from './types.js'
+import type { HerdrAgent, HerdrAgentStatus, HerdrDialog, HerdrDialogChoice, HerdrDialogScreen } from './types.js'
 import { HerdrError, herdrRequest } from './client.js'
 
-export type { HerdrAgent, HerdrAgentStatus, HerdrDialog } from './types.js'
+export type { HerdrAgent, HerdrAgentStatus, HerdrDialog, HerdrDialogChoice, HerdrDialogScreen } from './types.js'
 
 const STATUSES = new Set<HerdrAgentStatus>(['idle', 'working', 'blocked', 'done', 'unknown'])
 
@@ -79,18 +79,119 @@ export function dialogOf(kind: string | undefined, screen: string): HerdrDialog 
   return 'other'
 }
 
-async function readDialog(agent: HerdrAgent, options?: HerdrOptions): Promise<HerdrDialog> {
+const CHOICE = /^\s*(❯\s*)?(\d)\.\s+(.*\S)\s*$/
+const RULE = /^\s*─{10,}\s*$/
+const DOTTED = /^\s*╌{10,}\s*$/
+const FOOTER = /Esc to cancel|Enter to confirm|Tab to amend/i
+/** How much of what sits above the question is kept as its detail. */
+const DETAIL_LINES = 16
+
+/**
+ * A screen's lines without what Claude Code draws beside the dialog: a status
+ * pinned to the right edge ("No changes this session") after a wide gap, or on
+ * a line of its own far to the right.
+ */
+function dialogLines(screen: string): string[] {
+  return screen.split('\n').map(line => /^\s{30,}/.test(line) ? '' : line.replace(/(\S)\s{8,}\S.*$/, '$1').trimEnd())
+}
+
+/**
+ * A Claude Code dialog as it reads on screen: the question, what it shows
+ * above it, and its numbered choices, or undefined when there is no numbered
+ * list to pick from (the folder-trust screen's choices have no numbers).
+ *
+ * The choices are the last run numbered 1, 2, 3... on screen; a line between
+ * two of them is the first one's label wrapping. The question is the line
+ * above choice 1, and the detail runs up from it to the rule the dialog opens
+ * with. A digit picks its choice outright, whichever line is highlighted.
+ */
+export function dialogScreenOf(screen: string): HerdrDialogScreen | undefined {
+  const lines = dialogLines(screen)
+  const numbered = lines.flatMap((line, index) => {
+    const match = CHOICE.exec(line)
+    return match ? [{ index, number: Number(match[2]), selected: !!match[1], label: match[3]!.trim() }] : []
+  })
+  const run = numbered.slice(-1)
+  for (const choice of numbered.slice(0, -1).toReversed()) {
+    if (run[0]!.number === 1 || choice.number !== run[0]!.number - 1) break
+    run.unshift(choice)
+  }
+  if (run.length < 2 || run[0]!.number !== 1) {
+    return undefined
+  }
+
+  const choices = run.map((choice, at): HerdrDialogChoice => {
+    const end = run[at + 1]?.index ?? lines.length
+    const wrapped = []
+    for (let index = choice.index + 1; index < end; index++) {
+      const line = lines[index]!
+      if (!line.trim() || FOOTER.test(line)) break
+      wrapped.push(line.trim())
+    }
+    const label = [choice.label, ...wrapped].join(' ')
+    return { key: String(choice.number), label, ...(choice.selected ? { selected: true } : {}) }
+  })
+
+  let questionAt = run[0]!.index - 1
+  while (questionAt >= 0 && !lines[questionAt]!.trim()) questionAt--
+  if (questionAt < 0 || RULE.test(lines[questionAt]!)) {
+    return undefined
+  }
+  const question = lines[questionAt]!.trim()
+
+  let top = questionAt
+  while (top > 0 && questionAt - top < DETAIL_LINES && !RULE.test(lines[top - 1]!)) top--
+  const detail = lines.slice(top, questionAt)
+    .filter(line => !DOTTED.test(line))
+    .join('\n')
+    .replace(/^\s*\n|\s+$/g, '')
+  return { question, ...(detail ? { detail } : {}), choices }
+}
+
+async function readScreen(target: string, options?: HerdrOptions): Promise<string> {
+  const result = await herdrRequest<{ read?: { text?: string } }>(
+    'agent.read',
+    { target, source: 'detection', strip_ansi: true },
+    options,
+  )
+  return result.read?.text ?? ''
+}
+
+async function readDialog(agent: HerdrAgent, options?: HerdrOptions): Promise<Pick<HerdrAgent, 'dialog' | 'dialogScreen'>> {
   try {
-    const result = await herdrRequest<{ read?: { text?: string } }>(
-      'agent.read',
-      { target: agent.paneId, source: 'detection', strip_ansi: true },
-      options,
-    )
-    return dialogOf(agent.kind, result.read?.text ?? '')
+    const screen = await readScreen(agent.paneId, options)
+    const dialogScreen = agent.kind === 'claude' ? dialogScreenOf(screen) : undefined
+    return { dialog: dialogOf(agent.kind, screen), ...(dialogScreen ? { dialogScreen } : {}) }
   }
   catch {
-    return 'other'
+    return { dialog: 'other' }
   }
+}
+
+/** One of a dialog's choices, as the person picking it saw it. */
+export interface HerdrDialogAnswer {
+  question: string
+  key: string
+  label: string
+}
+
+/**
+ * Pick a choice in the dialog a pane is showing, by pressing its key, but only
+ * if that dialog is still on screen: the same question with the same choice
+ * under that key. Between reading a screen and answering it the agent can move
+ * on to another dialog, where the same digit means something else ("1" allows
+ * a command on one, and turns a setting on for good on another). Throws a
+ * `dialog_changed` HerdrError then, and presses nothing.
+ */
+export async function answerHerdrDialog(target: string, answer: HerdrDialogAnswer, options?: HerdrOptions): Promise<void> {
+  const shown = dialogScreenOf(await readScreen(target, options))
+  const choice = shown?.question === answer.question
+    ? shown.choices.find(choice => choice.key === answer.key && choice.label === answer.label)
+    : undefined
+  if (!choice) {
+    throw new HerdrError('dialog_changed', `the dialog in ${target} is no longer "${answer.question}" with ${answer.key}. ${answer.label}`)
+  }
+  await sendHerdrKeys(target, [choice.key], options)
 }
 
 /** Every pane herdr recognises a coding agent in, with its foreground processes and, when blocked, its dialog. */
@@ -100,7 +201,7 @@ export async function listHerdrAgents(options?: HerdrOptions): Promise<HerdrAgen
     let agent = toAgent(info)
     const pids = await foregroundPids(agent.paneId, options)
     if (pids) agent = { ...agent, pids }
-    if (agent.status === 'blocked') agent = { ...agent, dialog: await readDialog(agent, options) }
+    if (agent.status === 'blocked') agent = { ...agent, ...await readDialog(agent, options) }
     return agent
   }))
 }
