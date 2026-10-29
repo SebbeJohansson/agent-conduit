@@ -43,7 +43,9 @@ jobs:
       - name: Publish a version npm does not have yet
         run: |
           version=$(node -p "require('./package.json').version")
-          if npm view "agent-conduit@$version" version >/dev/null 2>&1; then
+          # npm view exits 0 for a version that does not exist, printing
+          # nothing, so compare what it prints.
+          if [ "$(npm view "agent-conduit@$version" version 2>/dev/null)" = "$version" ]; then
             echo "agent-conduit@$version is already on npm; nothing to publish"
             exit 0
           fi
