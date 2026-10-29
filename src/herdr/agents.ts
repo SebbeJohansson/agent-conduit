@@ -6,7 +6,7 @@
 
 import type { HerdrOptions } from './client.js'
 import type { HerdrAgent, HerdrAgentStatus } from './types.js'
-import { herdrRequest } from './client.js'
+import { HerdrError, herdrRequest } from './client.js'
 
 export type { HerdrAgent, HerdrAgentStatus } from './types.js'
 
@@ -172,21 +172,50 @@ export interface StartHerdrAgentOptions {
   args?: string[]
 }
 
+/** How long a new workspace's shell gets to reach its prompt before the start is given up. */
+const SHELL_READY_MS = 15_000
+const SHELL_RETRY_MS = 300
+
 /**
  * Start an agent in a new herdr workspace, without taking focus from whatever
  * you are looking at. Returns once herdr sees the agent ready for input.
+ *
+ * herdr only starts an agent in a pane whose shell sits idle at its prompt,
+ * and a new workspace's shell is still running its startup files at first (a
+ * zsh loading nvm, say), which herdr reports as `agent_pane_busy`. So the start
+ * is retried until the shell is ready. If it never is, or anything else fails,
+ * the workspace made for it is closed again rather than left behind.
  */
 export async function startHerdrAgent(start: StartHerdrAgentOptions, options?: HerdrOptions): Promise<HerdrAgent> {
   const name = start.name ?? herdrAgentName(start.cwd)
-  const created = await herdrRequest<{ root_pane: { pane_id: string } }>(
+  const created = await herdrRequest<{ workspace?: { workspace_id?: string }, root_pane: { pane_id: string } }>(
     'workspace.create',
     { cwd: start.cwd, label: name, focus: false },
     options,
   )
-  const result = await herdrRequest<{ agent: AgentInfo }>(
-    'agent.start',
-    { name, kind: start.kind, pane_id: created.root_pane.pane_id, args: start.args ?? [], timeout_ms: 30_000 },
-    { ...options, timeoutMs: Math.max(options?.timeoutMs ?? 0, 35_000) },
-  )
-  return toAgent(result.agent)
+  const params = { name, kind: start.kind, pane_id: created.root_pane.pane_id, args: start.args ?? [], timeout_ms: 30_000 }
+  const startOptions = { ...options, timeoutMs: Math.max(options?.timeoutMs ?? 0, 35_000) }
+  const deadline = Date.now() + SHELL_READY_MS
+
+  try {
+    while (true) {
+      try {
+        const result = await herdrRequest<{ agent: AgentInfo }>('agent.start', params, startOptions)
+        return toAgent(result.agent)
+      }
+      catch (error) {
+        if (!(error instanceof HerdrError) || error.code !== 'agent_pane_busy' || Date.now() >= deadline) {
+          throw error
+        }
+        await new Promise(resolve => setTimeout(resolve, SHELL_RETRY_MS))
+      }
+    }
+  }
+  catch (error) {
+    const workspaceId = created.workspace?.workspace_id ?? created.root_pane.pane_id.split(':')[0]
+    if (workspaceId) {
+      await herdrRequest('workspace.close', { workspace_id: workspaceId }, options).catch(() => {})
+    }
+    throw error
+  }
 }

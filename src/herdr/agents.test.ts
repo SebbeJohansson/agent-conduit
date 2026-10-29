@@ -114,6 +114,31 @@ describe('herdr agents', () => {
     expect(calls[1]).toMatchObject({ method: 'agent.start', params: { name: 'proj-ab12', kind: 'claude', pane_id: 'w3:p1' } })
   })
 
+  it('waits for a new workspace\'s shell to reach its prompt before starting', async () => {
+    let busy = 2
+    await serve((method) => {
+      if (method === 'workspace.create') return { result: { type: 'workspace_created', workspace: { workspace_id: 'w3' }, root_pane: { pane_id: 'w3:p1' } } }
+      if (method === 'agent.start' && busy-- > 0) return { error: { code: 'agent_pane_busy', message: 'agent target pane w3:p1 is not an available shell' } }
+      return { result: { type: 'agent_started', agent: { ...CLAUDE_PANE, pane_id: 'w3:p1', agent_status: 'idle' }, argv: [] } }
+    })
+
+    expect((await startHerdrAgent({ kind: 'claude', cwd: '/p', name: 'p-ab12' }, { socketPath })).paneId).toBe('w3:p1')
+    expect(calls.map(call => call.method)).toEqual(['workspace.create', 'agent.start', 'agent.start', 'agent.start'])
+  })
+
+  it('closes the workspace it made when the agent cannot start', async () => {
+    await serve((method) => {
+      if (method === 'workspace.create') return { result: { type: 'workspace_created', workspace: { workspace_id: 'w3' }, root_pane: { pane_id: 'w3:p1' } } }
+      if (method === 'agent.start') return { error: { code: 'unsupported_agent_kind', message: 'unsupported interactive agent kind nope' } }
+      return { result: { type: 'ok' } }
+    })
+
+    const failure = await startHerdrAgent({ kind: 'nope', cwd: '/p' }, { socketPath }).catch(error => error)
+
+    expect(failure.code).toBe('unsupported_agent_kind')
+    expect(calls.at(-1)).toEqual({ method: 'workspace.close', params: { workspace_id: 'w3' } })
+  })
+
   it('reports a herdr that is not running', async () => {
     const failure = await listHerdrAgents({ socketPath: join(dir, 'nothing.sock') }).catch(error => error)
     expect(String(failure)).toMatch(/ENOENT|ECONNREFUSED/)
