@@ -30,6 +30,9 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+          # Its automatic cache runs the runner's global Yarn 1 before
+          # corepack is on, which refuses this project's Yarn 4.
+          package-manager-cache: false
 
       # Trusted publishing needs npm 11.5.1 or later.
       - run: npm install -g npm@11
