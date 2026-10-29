@@ -1,0 +1,47 @@
+# Publishes to npm from main, whenever package.json carries a version npm
+# does not have yet: a "Releases x.y.z" commit bumps it, and every other
+# commit only runs the checks.
+#
+# No token: npm's trusted publishing lets this workflow publish by its GitHub
+# identity (OIDC), set up once on npmjs.com under the package's settings,
+# Trusted publishing: GitHub Actions, SebbeJohansson/agent-conduit, publish.yml.
+
+name: Publish
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install -g npm@11
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn check
+
+      - name: Publish a version npm does not have yet
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "agent-conduit@$version" version >/dev/null 2>&1; then
+            echo "agent-conduit@$version is already on npm; nothing to publish"
+            exit 0
+          fi
+          npm publish --access public

@@ -113,7 +113,7 @@ browser code that shows what a server read.
 ## Using it from another project
 
 ```json
-"dependencies": { "agent-conduit": "^0.5.0" }
+"dependencies": { "agent-conduit": "^0.6.0" }
 ```
 
 ### Running against this checkout
@@ -130,13 +130,22 @@ yarn dev   # here: rebuilds dist/ on save
 
 ### Releasing
 
+Pushing to main publishes. The Publish workflow (`.github/workflows/publish.yml`)
+runs the checks on every push, and publishes when `package.json` carries a
+version npm does not have yet. So a release is a commit that bumps it:
+
 ```bash
-npm version minor   # or patch
-npm publish         # builds through the prepare script
-git push --follow-tags
+npm version minor --no-git-tag-version   # or patch
+git commit -am "Releases 0.7.0: <what is new>"
+git push
 ```
 
 Then bump the version in each app's `package.json`.
+
+The workflow publishes without a token, through npm's trusted publishing. It
+is set up once on npmjs.com, in the package's settings under Trusted
+publishing: GitHub Actions, repository `SebbeJohansson/agent-conduit`,
+workflow `publish.yml`.
 
 ## Development
 
