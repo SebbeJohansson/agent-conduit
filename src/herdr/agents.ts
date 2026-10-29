@@ -48,8 +48,8 @@ function toAgent(info: AgentInfo): HerdrAgent {
 /** The pane's foreground process ids, or undefined when herdr cannot say. */
 async function foregroundPids(paneId: string, options?: HerdrOptions): Promise<number[] | undefined> {
   try {
-    const info = await herdrRequest<{ foreground_processes?: Array<{ pid?: unknown }> }>('pane.process_info', { pane_id: paneId }, options)
-    const pids = (info.foreground_processes ?? []).map(process => process.pid).filter((pid): pid is number => typeof pid === 'number')
+    const info = await herdrRequest<{ process_info?: { foreground_processes?: Array<{ pid?: unknown }> } }>('pane.process_info', { pane_id: paneId }, options)
+    const pids = (info.process_info?.foreground_processes ?? []).map(process => process.pid).filter((pid): pid is number => typeof pid === 'number')
     return pids.length ? pids : undefined
   }
   catch {

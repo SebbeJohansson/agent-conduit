@@ -63,7 +63,7 @@ describe('herdr agents', () => {
     await serve((method, params) => {
       if (method === 'pane.process_info') {
         return params.pane_id === 'w1:p2'
-          ? { result: { type: 'pane_process_info', pane_id: 'w1:p2', foreground_processes: [{ pid: 4242, name: 'claude' }] } }
+          ? { result: { type: 'pane_process_info', process_info: { pane_id: 'w1:p2', foreground_processes: [{ pid: 4242, name: 'claude' }] } } }
           : { error: { code: 'not_found', message: 'pane closed' } }
       }
       return { result: { type: 'agent_list', agents: [CLAUDE_PANE, { pane_id: 'w2:p1', workspace_id: 'w2', tab_id: 'w2:t1', agent: 'opencode', agent_status: 'working', agent_session: null }] } }
