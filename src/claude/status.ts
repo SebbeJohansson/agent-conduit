@@ -57,6 +57,8 @@ const TURN_ENDING = new Set(['end_turn', 'stop_sequence', 'max_tokens'])
 interface TranscriptEntry {
   type?: string
   isMeta?: boolean
+  /** Set on the summary Claude Code writes as a user turn when it compacts. */
+  isCompactSummary?: boolean
   isSidechain?: boolean
   /** Set on the reply Claude Code writes when the API call failed ("API Error: …"). */
   isApiErrorMessage?: boolean
@@ -144,8 +146,9 @@ function lastConversational(tail: string): { entry: TranscriptEntry, state: Tran
     }
 
     // `isMeta` marks context injected alongside a prompt rather than something
-    // either side said.
-    if (!entry.type || !CONVERSATIONAL.has(entry.type) || entry.isMeta) {
+    // either side said. A compaction summary is neither: Claude Code writes it
+    // as a user turn, and compacting while idle left finished sessions busy.
+    if (!entry.type || !CONVERSATIONAL.has(entry.type) || entry.isMeta || entry.isCompactSummary) {
       continue
     }
 

@@ -61,6 +61,15 @@ describe('readTranscriptState', () => {
     expect(readTranscriptState(tail.join('\n'))).toEqual({ phase: 'turn-ended', lastText: 'hi' })
   })
 
+  it('looks past a compaction summary', () => {
+    const tail = [
+      assistant('end_turn'),
+      line({ type: 'system', subtype: 'compact_boundary' }),
+      line({ type: 'user', isCompactSummary: true, message: { role: 'user', content: 'This session is being continued' } }),
+    ]
+    expect(readTranscriptState(tail.join('\n'))).toEqual({ phase: 'turn-ended', lastText: 'hi' })
+  })
+
   // A subagent finishing does not free the parent: the parent is still blocked
   // on the tool call that started it.
   it('reads a finished subagent turn as busy', () => {
